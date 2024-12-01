@@ -8,14 +8,25 @@ import orderRoutes from './routes/orders.js';
 import uploadRoutes from './routes/upload.js';
 import shippingRoutes from './routes/shipping.js';
 import productRoutes from './routes/products.js';
+import bodyParser from 'body-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// 日志中间件
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+    next();
+});
+
 // 连接数据库
-connectDB().catch(err => {
+connectDB().then(() => {
+    console.log('Database connection successful');
+}).catch(err => {
     console.error('Failed to connect to MongoDB:', err.message);
     // 在生产环境中返回一个友好的错误消息
     app.use((req, res) => {
@@ -49,8 +60,10 @@ const corsOptions = {
     preflightContinue: false
 };
 
-// 中间件
+// 中间件配置
 app.use(cors(corsOptions));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 
 // 预检请求处理
@@ -59,9 +72,9 @@ app.options('*', cors(corsOptions));
 // 静态文件服务
 app.use('/images', express.static(path.join(__dirname, '../public/images')));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use(express.static(path.join(__dirname, '../public')));
+app.use('/public', express.static(path.join(__dirname, '../public')));
 
-// 路由
+// 路由配置
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -75,11 +88,17 @@ app.get('/', (req, res) => {
 
 // 错误处理中间件
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: '服务器内部错误' });
+    console.error('Unhandled error:', err);
+    res.status(500).json({ 
+        message: 'An unexpected error occurred',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
+// 服务器配置
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
+
+export default app;

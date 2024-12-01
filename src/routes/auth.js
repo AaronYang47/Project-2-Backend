@@ -3,18 +3,34 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const router = express.Router();
 
 // 注册路由
 router.post('/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
+        
+        console.log('Registration attempt:', { username, email });
+
+        // 输入验证
+        if (!username || !email || !password) {
+            return res.status(400).json({ 
+                message: 'Please provide all required fields',
+                missing: {
+                    username: !username,
+                    email: !email,
+                    password: !password
+                }
+            });
+        }
 
         // 检查用户是否已存在
         const existingUser = await User.findOne({ $or: [{ email }, { username }] });
         if (existingUser) {
-            return res.status(400).json({ message: 'Username or email already exists' });
+            return res.status(400).json({ 
+                message: 'Username or email already exists',
+                field: existingUser.email === email ? 'email' : 'username'
+            });
         }
 
         // 加密密码
@@ -28,12 +44,20 @@ router.post('/register', async (req, res) => {
             password: hashedPassword
         });
 
-        await user.save();
+        try {
+            await user.save();
+        } catch (saveError) {
+            console.error('User save error:', saveError);
+            return res.status(500).json({ 
+                message: 'Registration failed',
+                error: process.env.NODE_ENV === 'development' ? saveError.message : 'Internal server error'
+            });
+        }
 
         // 生成 JWT token
         const token = jwt.sign(
             { id: user._id, email: user.email },
-            JWT_SECRET,
+            process.env.JWT_SECRET || 'fallback_secret', 
             { expiresIn: '24h' }
         );
 
@@ -48,7 +72,10 @@ router.post('/register', async (req, res) => {
         });
     } catch (error) {
         console.error('Register error:', error);
-        res.status(500).json({ message: 'Server error during registration' });
+        res.status(500).json({ 
+            message: 'Registration failed',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
 });
 
@@ -56,7 +83,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
+        
         // 查找用户
         const user = await User.findOne({ email });
         if (!user) {
@@ -72,7 +99,7 @@ router.post('/login', async (req, res) => {
         // 生成 JWT token
         const token = jwt.sign(
             { id: user._id, email: user.email },
-            JWT_SECRET,
+            process.env.JWT_SECRET || 'fallback_secret', 
             { expiresIn: '24h' }
         );
 
@@ -87,7 +114,10 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: 'Server error during login' });
+        res.status(500).json({ 
+            message: 'Login failed',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
 });
 
